@@ -102,7 +102,8 @@ func GetSecret(secretName string) (map[string]string, error) {
 	secretsMap := make(map[string]string)
 	err = json.Unmarshal([]byte(secretString), &secretsMap)
 	if err != nil {
-		return nil, fmt.Errorf("Error: %s\n", err)
+		println(printPrefix, "Found secret but not a valid json, skipping..", secretName)
+		return make(map[string]string), nil
 	}
 
 	return secretsMap, nil
