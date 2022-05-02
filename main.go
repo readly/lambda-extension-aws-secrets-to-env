@@ -26,6 +26,7 @@ var (
 const envFile = "/tmp/.env"
 
 func main() {
+	log.Logger = log.With().Str("extension_name", extensionName).Logger()
 	ctx, cancel := context.WithCancel(context.Background())
 
 	sigs := make(chan os.Signal, 1)
@@ -41,7 +42,7 @@ func main() {
 
 	res, err := extensionClient.Register(ctx, extensionName)
 	if err != nil {
-		panic(err)
+		log.Fatal().Err(err).Msg("Failed to register extension")
 	}
 	log.Info().Interface("reponse", res).Msg("Register response")
 
@@ -57,7 +58,7 @@ func secretsToEnvFile() {
 
 	f, err := os.OpenFile(envFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
-		panic(err)
+		log.Fatal().Err(err).Msg("Failed to open env file")
 	}
 	defer f.Close()
 
@@ -69,7 +70,7 @@ func secretsToEnvFile() {
 			log.Info().Str("env", envName).Msg("Found secret")
 			secretsMap, err := GetSecret(envValue)
 			if err != nil {
-				panic(err)
+				log.Fatal().Err(err).Msg("Failed to get secret")
 			}
 			for k, v := range secretsMap {
 				log.Info().Str("env", k).Msg("Writing to env file")
@@ -91,7 +92,7 @@ func GetSecret(secretName string) (map[string]string, error) {
 
 	result, err := svc.GetSecretValue(input)
 	if err != nil {
-		panic(err.Error())
+		log.Fatal().Err(err).Msg("Failed to get secret")
 	}
 
 	var secretString string
