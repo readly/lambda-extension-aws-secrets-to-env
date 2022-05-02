@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
+	"github.com/rs/zerolog/log"
 
 	"github.com/readly/lambda-extension-aws-secrets-to-env/extension"
 )
@@ -20,7 +21,6 @@ import (
 var (
 	extensionName   = filepath.Base(os.Args[0]) // extension name has to match the filename
 	extensionClient = extension.NewClient(os.Getenv("AWS_LAMBDA_RUNTIME_API"))
-	printPrefix     = fmt.Sprintf("[%s]", extensionName)
 )
 
 const envFile = "/tmp/.env"
@@ -33,8 +33,7 @@ func main() {
 	go func() {
 		s := <-sigs
 		cancel()
-		println(printPrefix, "Received", s)
-		println(printPrefix, "Exiting")
+		log.Info().Str("signal", s.String()).Msg("Received signal, exiting")
 	}()
 
 	// fetch secrets from AWS Secrets Manager
@@ -44,7 +43,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	println(printPrefix, "Register response:", prettyPrint(res))
+	log.Info().Interface("reponse", res).Msg("Register response")
 
 	// Will block until shutdown event is received or cancelled via the context.
 	processEvents(ctx)
@@ -52,7 +51,7 @@ func main() {
 
 func secretsToEnvFile() {
 	if _, err := os.Stat(envFile); err == nil {
-		println(printPrefix, ".env file already exists, skipping...")
+		log.Info().Msg("Found env file, skipping..")
 		return
 	}
 
@@ -67,13 +66,13 @@ func secretsToEnvFile() {
 		envValue := strings.Split(env, "=")[1]
 
 		if strings.HasSuffix(envName, "_SECRET_ARN") {
-			println(printPrefix, "Found secret arn", envName)
+			log.Info().Str("env", envName).Msg("Found secret")
 			secretsMap, err := GetSecret(envValue)
 			if err != nil {
 				panic(err)
 			}
 			for k, v := range secretsMap {
-				println(printPrefix, "Writing", k, "to env file")
+				log.Info().Str("env", k).Msg("Writing to env file")
 				_, err = f.WriteString(fmt.Sprintf("%s=%s\n", k, v))
 			}
 		}
@@ -102,7 +101,7 @@ func GetSecret(secretName string) (map[string]string, error) {
 	secretsMap := make(map[string]string)
 	err = json.Unmarshal([]byte(secretString), &secretsMap)
 	if err != nil {
-		println(printPrefix, "Found secret but not a valid json, skipping..", secretName)
+		log.Warn().Str("secret", secretName).Msg("Failed to unmarshal secret")
 		return make(map[string]string), nil
 	}
 
@@ -115,28 +114,18 @@ func processEvents(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
-			println(printPrefix, "Waiting for event...")
+			log.Info().Msg("Waiting for event...")
 			res, err := extensionClient.NextEvent(ctx)
 			if err != nil {
-				println(printPrefix, "Error:", err)
-				println(printPrefix, "Exiting")
+				log.Error().Err(err).Msg("Failed to get next event")
 				return
 			}
-			println(printPrefix, "Received event:", prettyPrint(res))
+			log.Info().Interface("event", res).Msg("Received event")
 			// Exit if we receive a SHUTDOWN event
 			if res.EventType == extension.Shutdown {
-				println(printPrefix, "Received SHUTDOWN event")
-				println(printPrefix, "Exiting")
+				log.Info().Msg("Received shutdown event, exiting")
 				return
 			}
 		}
 	}
-}
-
-func prettyPrint(v interface{}) string {
-	data, err := json.MarshalIndent(v, "", "\t")
-	if err != nil {
-		return ""
-	}
-	return string(data)
 }
