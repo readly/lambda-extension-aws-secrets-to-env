@@ -52,8 +52,11 @@ func main() {
 
 func secretsToEnvFile() {
 	if _, err := os.Stat(envFile); err == nil {
-		log.Info().Msg("Found env file, skipping..")
-		return
+		log.Info().Msg("Found env file, removing..")
+		err := os.Remove(envFile)
+		if err != nil {
+			log.Fatal().Err(err).Msg("failed to remove file")
+		}
 	}
 
 	f, err := os.OpenFile(envFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
@@ -95,15 +98,17 @@ func GetSecret(secretName string) (map[string]string, error) {
 		log.Fatal().Err(err).Msg("Failed to get secret")
 	}
 
+	secretsMap := make(map[string]string)
 	var secretString string
+
 	if result.SecretString != nil {
+		log.Info().Str("result", result.String()).Msg("Found secret in AWS Secrets manager")
 		secretString = *result.SecretString
 	}
-	secretsMap := make(map[string]string)
+
 	err = json.Unmarshal([]byte(secretString), &secretsMap)
 	if err != nil {
 		log.Warn().Str("secret", secretName).Msg("Failed to unmarshal secret")
-		return make(map[string]string), nil
 	}
 
 	return secretsMap, nil
