@@ -1,6 +1,6 @@
 module github.com/readly/lambda-extension-aws-secrets-to-env
 
-go 1.17
+go 1.21
 
 require github.com/aws/aws-sdk-go v1.42.52
 
