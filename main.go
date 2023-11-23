@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -13,8 +14,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
-	"github.com/rs/zerolog/log"
-
 	"github.com/readly/lambda-extension-aws-secrets-to-env/extension"
 )
 
@@ -26,7 +25,8 @@ var (
 const envFile = "/tmp/.env"
 
 func main() {
-	log.Logger = log.With().Str("extension_name", extensionName).Logger()
+	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	slog.SetDefault(log)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	sigs := make(chan os.Signal, 1)
@@ -41,7 +41,7 @@ func main() {
 
 	_, err := extensionClient.Register(ctx, extensionName)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to register extension")
+		slog.Error(err.Error())
 	}
 
 	// Will block until shutdown event is received or cancelled via the context.
@@ -52,13 +52,15 @@ func secretsToEnvFile() {
 	if _, err := os.Stat(envFile); err == nil {
 		err := os.Remove(envFile)
 		if err != nil {
-			log.Fatal().Err(err).Msgf("failed to remove file: %s", envFile)
+			slog.Error("failed to remove environment file", "file", envFile, "err", err)
+			os.Exit(1)
 		}
 	}
 
 	f, err := os.OpenFile(envFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
-		log.Fatal().Err(err).Msgf("failed to open env file: %s", envFile)
+		slog.Error("failed to open env file", "file", envFile, "err", err)
+		os.Exit(1)
 	}
 	defer f.Close()
 
@@ -69,7 +71,7 @@ func secretsToEnvFile() {
 		if strings.HasSuffix(envName, "_SECRET_ARN") {
 			secretsMap, err := GetSecret(envValue)
 			if err != nil {
-				log.Fatal().Err(err).Msg("Failed to get secret")
+				slog.Error("failed to get secret", "err", err)
 			}
 			for k, v := range secretsMap {
 				_, _ = f.WriteString(fmt.Sprintf("%s=%s\n", k, v))
@@ -90,7 +92,7 @@ func GetSecret(secretName string) (map[string]string, error) {
 
 	result, err := svc.GetSecretValue(input)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to get secret")
+		return nil, err
 	}
 
 	secretsMap := make(map[string]string)
@@ -102,7 +104,7 @@ func GetSecret(secretName string) (map[string]string, error) {
 
 	err = json.Unmarshal([]byte(secretString), &secretsMap)
 	if err != nil {
-		log.Warn().Str("secret", secretName).Msg("failed to unmarshal secret")
+		return nil, fmt.Errorf("failed to unmarshal secret '%s': %w", secretString, err)
 	}
 
 	return secretsMap, nil
@@ -116,7 +118,7 @@ func processEvents(ctx context.Context) {
 		default:
 			res, err := extensionClient.NextEvent(ctx)
 			if err != nil {
-				log.Error().Err(err).Msg("failed to get next event")
+				slog.Error("failed to fetch next lambda event", "err", err)
 				return
 			}
 			// Exit if we receive a SHUTDOWN event
