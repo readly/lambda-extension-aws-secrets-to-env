@@ -32,19 +32,17 @@ func main() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
-		s := <-sigs
+		<-sigs
 		cancel()
-		log.Info().Str("signal", s.String()).Msg("Received signal, exiting")
 	}()
 
 	// fetch secrets from AWS Secrets Manager
 	secretsToEnvFile()
 
-	res, err := extensionClient.Register(ctx, extensionName)
+	_, err := extensionClient.Register(ctx, extensionName)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to register extension")
+		log.Fatal().Err(err).Msg("failed to register extension")
 	}
-	log.Info().Interface("reponse", res).Msg("Register response")
 
 	// Will block until shutdown event is received or cancelled via the context.
 	processEvents(ctx)
@@ -52,16 +50,15 @@ func main() {
 
 func secretsToEnvFile() {
 	if _, err := os.Stat(envFile); err == nil {
-		log.Info().Msg("Found env file, removing..")
 		err := os.Remove(envFile)
 		if err != nil {
-			log.Fatal().Err(err).Msg("failed to remove file")
+			log.Fatal().Err(err).Msgf("failed to remove file: %s", envFile)
 		}
 	}
 
 	f, err := os.OpenFile(envFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to open env file")
+		log.Fatal().Err(err).Msgf("failed to open env file: %s", envFile)
 	}
 	defer f.Close()
 
@@ -70,14 +67,12 @@ func secretsToEnvFile() {
 		envValue := strings.Split(env, "=")[1]
 
 		if strings.HasSuffix(envName, "_SECRET_ARN") {
-			log.Info().Str("env", envName).Msg("Found secret")
 			secretsMap, err := GetSecret(envValue)
 			if err != nil {
 				log.Fatal().Err(err).Msg("Failed to get secret")
 			}
 			for k, v := range secretsMap {
-				log.Info().Str("env", k).Msg("Writing to env file")
-				_, err = f.WriteString(fmt.Sprintf("%s=%s\n", k, v))
+				_, _ = f.WriteString(fmt.Sprintf("%s=%s\n", k, v))
 			}
 		}
 	}
@@ -102,13 +97,12 @@ func GetSecret(secretName string) (map[string]string, error) {
 	var secretString string
 
 	if result.SecretString != nil {
-		log.Info().Str("result", result.String()).Msg("Found secret in AWS Secrets manager")
 		secretString = *result.SecretString
 	}
 
 	err = json.Unmarshal([]byte(secretString), &secretsMap)
 	if err != nil {
-		log.Warn().Str("secret", secretName).Msg("Failed to unmarshal secret")
+		log.Warn().Str("secret", secretName).Msg("failed to unmarshal secret")
 	}
 
 	return secretsMap, nil
@@ -120,16 +114,13 @@ func processEvents(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
-			log.Info().Msg("Waiting for event...")
 			res, err := extensionClient.NextEvent(ctx)
 			if err != nil {
-				log.Error().Err(err).Msg("Failed to get next event")
+				log.Error().Err(err).Msg("failed to get next event")
 				return
 			}
-			log.Info().Interface("event", res).Msg("Received event")
 			// Exit if we receive a SHUTDOWN event
 			if res.EventType == extension.Shutdown {
-				log.Info().Msg("Received shutdown event, exiting")
 				return
 			}
 		}
