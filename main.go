@@ -81,10 +81,8 @@ func secretsToEnvFile() {
 }
 
 func GetSecret(secretName string) (map[string]string, error) {
-	svc := secretsmanager.New(
-		session.New(),
-		aws.NewConfig(),
-	)
+	sess := session.Must(session.NewSession(aws.NewConfig()))
+	svc := secretsmanager.New(sess)
 
 	input := &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(secretName),
