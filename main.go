@@ -20,6 +20,10 @@ import (
 var (
 	extensionName   = filepath.Base(os.Args[0]) // extension name has to match the filename
 	extensionClient = extension.NewClient(os.Getenv("AWS_LAMBDA_RUNTIME_API"))
+	// Exclude the following env variables
+	extensionExclude = map[string]struct{}{
+		"DD_API_KEY_SECRET_ARN": {},
+	}
 )
 
 const envFile = "/tmp/.env"
@@ -68,7 +72,7 @@ func secretsToEnvFile() {
 		envName := strings.Split(env, "=")[0]
 		envValue := strings.Split(env, "=")[1]
 
-		if strings.HasSuffix(envName, "_SECRET_ARN") {
+		if _, ok := extensionExclude[envName]; !ok && strings.HasSuffix(envName, "_SECRET_ARN") {
 			secretsMap, err := GetSecret(envValue)
 			if err != nil {
 				slog.Error("failed to get secret", "err", err)
