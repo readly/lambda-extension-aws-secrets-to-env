@@ -67,8 +67,8 @@ func secretsToEnvFile() {
 	for _, env := range os.Environ() {
 		envName := strings.Split(env, "=")[0]
 		envValue := strings.Split(env, "=")[1]
-
-		if strings.HasSuffix(envName, "_SECRET_ARN") {
+		// look for environment variables that end with _SECRET_ARN but exclude everything that starts with DD_
+		if !strings.HasPrefix(envName, "DD_") && strings.HasSuffix(envName, "_SECRET_ARN") {
 			secretsMap, err := GetSecret(envValue)
 			if err != nil {
 				slog.Error("failed to get secret", "err", err)
